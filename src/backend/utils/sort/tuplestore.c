@@ -631,12 +631,11 @@ tuplestore_puttuple(Tuplestorestate *state, HeapTuple tuple)
  * This avoids an extra tuple-construction operation.
  */
 void
-tuplestore_putvalues(Tuplestorestate *state, TupleDesc tdesc,
+tuplestore_putvalues(Tuplestorestate *state, MemTupleBinding *mt_bind,
 					 Datum *values, bool *isnull)
 {
 	MemoryContext oldcxt = MemoryContextSwitchTo(state->context);
 
-	MemTupleBinding *mt_bind = create_memtuple_binding(tdesc);
 	MemTuple tuple = memtuple_form_to(mt_bind, values, isnull, NULL, NULL, false);
 
 	USEMEM(state, GetMemoryChunkSpace(tuple));

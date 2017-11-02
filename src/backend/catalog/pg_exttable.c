@@ -195,6 +195,7 @@ deflist_to_tuplestore(ReturnSetInfo *rsinfo, List *options)
 	bool		nulls[2];
 	MemoryContext per_query_ctx;
 	MemoryContext oldcontext;
+	MemTupleBinding *mt_bind;
 
 	/* check to see if caller supports us returning a tuplestore */
 	if (rsinfo == NULL || !IsA(rsinfo, ReturnSetInfo))
@@ -214,6 +215,7 @@ deflist_to_tuplestore(ReturnSetInfo *rsinfo, List *options)
 	 * Now prepare the result set.
 	 */
 	tupdesc = CreateTupleDescCopy(rsinfo->expectedDesc);
+	mt_bind = create_memtuple_binding(tupdesc);
 	tupstore = tuplestore_begin_heap(true, false, work_mem);
 	rsinfo->returnMode = SFRM_Materialize;
 	rsinfo->setResult = tupstore;
@@ -235,11 +237,12 @@ deflist_to_tuplestore(ReturnSetInfo *rsinfo, List *options)
 			values[1] = (Datum) 0;
 			nulls[1] = true;
 		}
-	tuplestore_putvalues(tupstore, tupdesc, values, nulls);
+		tuplestore_putvalues(tupstore, mt_bind, values, nulls);
 	}
 
 	/* clean up and return the tuplestore */
 	tuplestore_donestoring(tupstore);
+	destroy_memtuple_binding(mt_bind);
 
 	MemoryContextSwitchTo(oldcontext);
 }

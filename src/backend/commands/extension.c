@@ -99,7 +99,7 @@ static List *find_update_path(List *evi_list,
 				 bool reinitialize);
 static void get_available_versions_for_extension(ExtensionControlFile *pcontrol,
 									 Tuplestorestate *tupstore,
-									 TupleDesc tupdesc);
+									 MemTupleBinding *mt_bind);
 static void ApplyExtensionUpdates(AlterExtensionStmt *stmt, Oid extensionOid,
 					  ExtensionControlFile *pcontrol,
 					  const char *initialVersion,
@@ -1764,6 +1764,7 @@ pg_available_extensions(PG_FUNCTION_ARGS)
 	char	   *location;
 	DIR		   *dir;
 	struct dirent *de;
+	MemTupleBinding *mt_bind;
 
 	/* check to see if caller supports us returning a tuplestore */
 	if (rsinfo == NULL || !IsA(rsinfo, ReturnSetInfo))
@@ -1779,6 +1780,8 @@ pg_available_extensions(PG_FUNCTION_ARGS)
 	/* Build a tuple descriptor for our result type */
 	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
 		elog(ERROR, "return type must be a row type");
+
+	mt_bind = create_memtuple_binding(tupdesc);
 
 	/* Build tuplestore to hold the result rows */
 	per_query_ctx = rsinfo->econtext->ecxt_per_query_memory;
@@ -1841,7 +1844,7 @@ pg_available_extensions(PG_FUNCTION_ARGS)
 			else
 				values[2] = CStringGetTextDatum(control->comment);
 
-			tuplestore_putvalues(tupstore, tupdesc, values, nulls);
+			tuplestore_putvalues(tupstore, mt_bind, values, nulls);
 		}
 
 		FreeDir(dir);
@@ -1849,6 +1852,7 @@ pg_available_extensions(PG_FUNCTION_ARGS)
 
 	/* clean up and return the tuplestore */
 	tuplestore_donestoring(tupstore);
+	destroy_memtuple_binding(mt_bind);
 
 	return (Datum) 0;
 }
@@ -1873,6 +1877,7 @@ pg_available_extension_versions(PG_FUNCTION_ARGS)
 	char	   *location;
 	DIR		   *dir;
 	struct dirent *de;
+	MemTupleBinding *mt_bind;
 
 	/* check to see if caller supports us returning a tuplestore */
 	if (rsinfo == NULL || !IsA(rsinfo, ReturnSetInfo))
@@ -1889,6 +1894,7 @@ pg_available_extension_versions(PG_FUNCTION_ARGS)
 	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
 		elog(ERROR, "return type must be a row type");
 
+	mt_bind = create_memtuple_binding(tupdesc);
 	/* Build tuplestore to hold the result rows */
 	per_query_ctx = rsinfo->econtext->ecxt_per_query_memory;
 	oldcontext = MemoryContextSwitchTo(per_query_ctx);
@@ -1933,7 +1939,7 @@ pg_available_extension_versions(PG_FUNCTION_ARGS)
 			control = read_extension_control_file(extname);
 
 			/* scan extension's script directory for install scripts */
-			get_available_versions_for_extension(control, tupstore, tupdesc);
+			get_available_versions_for_extension(control, tupstore, mt_bind);
 		}
 
 		FreeDir(dir);
@@ -1941,6 +1947,7 @@ pg_available_extension_versions(PG_FUNCTION_ARGS)
 
 	/* clean up and return the tuplestore */
 	tuplestore_donestoring(tupstore);
+	destroy_memtuple_binding(mt_bind);
 
 	return (Datum) 0;
 }
@@ -1952,7 +1959,7 @@ pg_available_extension_versions(PG_FUNCTION_ARGS)
 static void
 get_available_versions_for_extension(ExtensionControlFile *pcontrol,
 									 Tuplestorestate *tupstore,
-									 TupleDesc tupdesc)
+									 MemTupleBinding *mt_bind)
 {
 	int			extnamelen = strlen(pcontrol->name);
 	char	   *location;
@@ -2041,7 +2048,7 @@ get_available_versions_for_extension(ExtensionControlFile *pcontrol,
 		else
 			values[6] = CStringGetTextDatum(control->comment);
 
-		tuplestore_putvalues(tupstore, tupdesc, values, nulls);
+		tuplestore_putvalues(tupstore, mt_bind, values, nulls);
 	}
 
 	FreeDir(dir);
@@ -2063,6 +2070,7 @@ pg_extension_update_paths(PG_FUNCTION_ARGS)
 	List	   *evi_list;
 	ExtensionControlFile *control;
 	ListCell   *lc1;
+	MemTupleBinding *mt_bind;
 
 	/* Check extension name validity before any filesystem access */
 	check_valid_extension_name(NameStr(*extname));
@@ -2082,6 +2090,7 @@ pg_extension_update_paths(PG_FUNCTION_ARGS)
 	if (get_call_result_type(fcinfo, NULL, &tupdesc) != TYPEFUNC_COMPOSITE)
 		elog(ERROR, "return type must be a row type");
 
+	mt_bind = create_memtuple_binding(tupdesc);
 	/* Build tuplestore to hold the result rows */
 	per_query_ctx = rsinfo->econtext->ecxt_per_query_memory;
 	oldcontext = MemoryContextSwitchTo(per_query_ctx);
@@ -2148,12 +2157,13 @@ pg_extension_update_paths(PG_FUNCTION_ARGS)
 				pfree(pathbuf.data);
 			}
 
-			tuplestore_putvalues(tupstore, tupdesc, values, nulls);
+			tuplestore_putvalues(tupstore, mt_bind, values, nulls);
 		}
 	}
 
 	/* clean up and return the tuplestore */
 	tuplestore_donestoring(tupstore);
+	destroy_memtuple_binding(mt_bind);
 
 	return (Datum) 0;
 }

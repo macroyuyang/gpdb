@@ -765,6 +765,7 @@ pg_prepared_statement(PG_FUNCTION_ARGS)
 	Tuplestorestate *tupstore;
 	MemoryContext per_query_ctx;
 	MemoryContext oldcontext;
+	MemTupleBinding *mt_bind;
 
 	/* check to see if caller supports us returning a tuplestore */
 	if (rsinfo == NULL || !IsA(rsinfo, ReturnSetInfo))
@@ -805,6 +806,7 @@ pg_prepared_statement(PG_FUNCTION_ARGS)
 
 	/* generate junk in short-term context */
 	MemoryContextSwitchTo(oldcontext);
+	mt_bind = create_memtuple_binding(tupdesc);
 
 	/* hash table might be uninitialized */
 	if (prepared_queries)
@@ -832,7 +834,7 @@ pg_prepared_statement(PG_FUNCTION_ARGS)
 										  prep_stmt->plansource->num_params);
 			values[4] = BoolGetDatum(prep_stmt->from_sql);
 
-			tuplestore_putvalues(tupstore, tupdesc, values, nulls);
+			tuplestore_putvalues(tupstore, mt_bind, values, nulls);
 		}
 	}
 
@@ -842,6 +844,7 @@ pg_prepared_statement(PG_FUNCTION_ARGS)
 	rsinfo->returnMode = SFRM_Materialize;
 	rsinfo->setResult = tupstore;
 	rsinfo->setDesc = tupdesc;
+	destroy_memtuple_binding(mt_bind);
 
 	return (Datum) 0;
 }

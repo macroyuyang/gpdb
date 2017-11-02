@@ -54,7 +54,7 @@ extern void tuplestore_set_eflags(Tuplestorestate *state, int eflags);
 extern void tuplestore_puttupleslot(Tuplestorestate *state,
 						TupleTableSlot *slot);
 extern void tuplestore_puttuple(Tuplestorestate *state, HeapTuple tuple);
-extern void tuplestore_putvalues(Tuplestorestate *state, TupleDesc tdesc,
+extern void tuplestore_putvalues(Tuplestorestate *state, MemTupleBinding *mt_bind,
 								 Datum *values, bool *isnull);
 
 /* tuplestore_donestoring() used to be required, but is no longer used */

@@ -174,6 +174,7 @@ typedef struct plperl_call_data
 	Tuplestorestate *tuple_store;
 	TupleDesc	ret_tdesc;
 	MemoryContext tmp_cxt;
+	MemTupleBinding *ret_mt_bind;
 } plperl_call_data;
 
 /**********************************************************************
@@ -2983,6 +2984,7 @@ plperl_return_next(SV *sv)
 		old_cxt = MemoryContextSwitchTo(rsi->econtext->ecxt_per_query_memory);
 
 		current_call_data->ret_tdesc = CreateTupleDescCopy(tupdesc);
+		current_call_data->ret_mt_bind = create_memtuple_binding(tupdesc);
 		current_call_data->tuple_store =
 			tuplestore_begin_heap(rsi->allowedModes,
 								  false, work_mem);
@@ -3036,7 +3038,7 @@ plperl_return_next(SV *sv)
 								 &isNull);
 
 		tuplestore_putvalues(current_call_data->tuple_store,
-							 current_call_data->ret_tdesc,
+							 current_call_data->ret_mt_bind,
 							 &ret, &isNull);
 	}
 

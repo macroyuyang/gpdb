@@ -2288,7 +2288,7 @@ ExecMakeTableFunctionResult(ExprState *funcexpr,
 			}
 			else
 			{
-				tuplestore_putvalues(tupstore, tupdesc, &result, &fcinfo.isnull);
+				tuplestore_putvalues(tupstore, mt_bind, &result, &fcinfo.isnull);
 			}
 			MemoryContextSwitchTo(oldcontext);
 
@@ -2335,12 +2335,18 @@ no_function_result:
 			Datum	   *nulldatums;
 			bool	   *nullflags;
 
+			if (mt_bind != NULL)
+			{
+				destroy_memtuple_binding(mt_bind);
+			}
+			mt_bind = create_memtuple_binding(expectedDesc);
 			MemoryContextSwitchTo(econtext->ecxt_per_tuple_memory);
 			nulldatums = (Datum *) palloc0(natts * sizeof(Datum));
 			nullflags = (bool *) palloc(natts * sizeof(bool));
 			MemSetAligned(nullflags, true, natts * sizeof(bool));
 			MemoryContextSwitchTo(econtext->ecxt_per_query_memory);
-			tuplestore_putvalues(tupstore, expectedDesc, nulldatums, nullflags);
+			tuplestore_putvalues(tupstore, mt_bind, nulldatums, nullflags);
+			destroy_memtuple_binding(mt_bind);
 		}
 	}
 

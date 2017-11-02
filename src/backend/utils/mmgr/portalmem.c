@@ -1046,6 +1046,7 @@ pg_cursor(PG_FUNCTION_ARGS)
 	MemoryContext oldcontext;
 	HASH_SEQ_STATUS hash_seq;
 	PortalHashEnt *hentry;
+	MemTupleBinding *mt_bind;
 
 	/* check to see if caller supports us returning a tuplestore */
 	if (rsinfo == NULL || !IsA(rsinfo, ReturnSetInfo))
@@ -1088,6 +1089,7 @@ pg_cursor(PG_FUNCTION_ARGS)
 
 	/* generate junk in short-term context */
 	MemoryContextSwitchTo(oldcontext);
+	mt_bind = create_memtuple_binding(tupdesc);
 
 	hash_seq_init(&hash_seq, PortalHashTable);
 	while ((hentry = hash_seq_search(&hash_seq)) != NULL)
@@ -1112,7 +1114,7 @@ pg_cursor(PG_FUNCTION_ARGS)
 		values[4] = BoolGetDatum(portal->cursorOptions & CURSOR_OPT_SCROLL);
 		values[5] = TimestampTzGetDatum(portal->creation_time);
 
-		tuplestore_putvalues(tupstore, tupdesc, values, nulls);
+		tuplestore_putvalues(tupstore, mt_bind, values, nulls);
 	}
 
 	/* clean up and return the tuplestore */
@@ -1121,6 +1123,7 @@ pg_cursor(PG_FUNCTION_ARGS)
 	rsinfo->returnMode = SFRM_Materialize;
 	rsinfo->setResult = tupstore;
 	rsinfo->setDesc = tupdesc;
+	destroy_memtuple_binding(mt_bind);
 
 	return (Datum) 0;
 }

@@ -680,6 +680,7 @@ typedef struct
 	PLpgSQL_stmt *err_stmt;		/* current stmt */
 	const char *err_text;		/* additional state info */
 	void	   *plugin_info;	/* reserved for use by optional plugin */
+	MemTupleBinding *ret_mt_bind;	/* created only once and used for putvalues of tuple_store */
 } PLpgSQL_execstate;
 
 

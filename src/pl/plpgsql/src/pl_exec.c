@@ -2041,6 +2041,7 @@ exec_stmt_return_next(PLpgSQL_execstate *estate,
 	MemoryContext	oldcxt;
 	HeapTuple		tuple = NULL;
 	bool			free_tuple = false;
+	MemTupleBinding	*mt_bind;
 
 	if (!estate->retisset)
 		ereport(ERROR,
@@ -2053,6 +2054,7 @@ exec_stmt_return_next(PLpgSQL_execstate *estate,
 	/* rettupdesc will be filled by exec_init_tuple_store */
 	tupdesc = estate->rettupdesc;
 	natts = tupdesc->natts;
+	mt_bind = estate->ret_mt_bind;
 
 	if (stmt->retvarno >= 0)
 	{
@@ -2080,7 +2082,7 @@ exec_stmt_return_next(PLpgSQL_execstate *estate,
 													isNull);
 
 					oldcxt = MemoryContextSwitchTo(estate->tuple_store_cxt);
-					tuplestore_putvalues(estate->tuple_store, tupdesc,
+					tuplestore_putvalues(estate->tuple_store, mt_bind,
 										 &retval, &isNull);
 					MemoryContextSwitchTo(oldcxt);
 				}
@@ -2146,7 +2148,7 @@ exec_stmt_return_next(PLpgSQL_execstate *estate,
 										tupdesc->attrs[0]->atttypmod,
 										isNull);
 
-		tuplestore_putvalues(estate->tuple_store, tupdesc,
+		tuplestore_putvalues(estate->tuple_store, mt_bind,
 							 &retval, &isNull);
 	}
 	else
@@ -2253,6 +2255,11 @@ exec_init_tuple_store(PLpgSQL_execstate *estate)
 
 	estate->tuple_store = tuplestore_begin_heap(true, false, work_mem);
 
+	/*
+	 * The ret_mt_bind is only used for putvalues of tuple_store, so we create it from
+	 * tuple_store_cxt.
+	 */
+	estate->ret_mt_bind = create_memtuple_binding(rsi->expectedDesc);
 	CurrentResourceOwner = oldowner;
 	MemoryContextSwitchTo(oldcxt);
 
@@ -2394,6 +2401,7 @@ plpgsql_estate_setup(PLpgSQL_execstate *estate,
 	estate->err_func = func;
 	estate->err_stmt = NULL;
 	estate->err_text = NULL;
+	estate->ret_mt_bind = NULL;
 
 	/*
 	 * Create an EState and ExprContext for evaluation of simple expressions.
