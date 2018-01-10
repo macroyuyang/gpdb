@@ -870,7 +870,7 @@ ReceiveAndUnpackTarFile(PGconn *conn, PGresult *res, int rownum)
 	if (basetablespace)
 		strlcpy(current_path, basedir, sizeof(current_path));
 	else
-		strlcpy(current_path, PQgetvalue(res, rownum, 2), sizeof(current_path));
+		strlcpy(current_path, PQgetvalue(res, rownum, 1), sizeof(current_path));
 
 	/*
 	 * Get the COPY data
