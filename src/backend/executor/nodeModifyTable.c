@@ -197,7 +197,7 @@ ExecInsert(TupleTableSlot *slot,
 		resultRelInfo = slot_get_partition(slot, estate);
 
 		/* Check whether the user provided the correct leaf part only if required */
-		if (!dml_ignore_target_partition_check)
+		if (!dml_ignore_target_partition_check && !isUpdate)
 		{
 			Assert(NULL != estate->es_result_partitions->part &&
 					NULL != resultRelInfo->ri_RelationDesc);
@@ -1379,8 +1379,37 @@ ExecModifyTable(ModifyTableState *node)
 								  PLANGEN_PLANNER, false /* isUpdate */);
 				break;
 			case CMD_UPDATE:
-				slot = ExecUpdate(tupleid, slot, planSlot,
-								  &node->mt_epqstate, estate);
+				{
+					int			action;
+					bool		isnull;
+					int			actionColIdx;
+
+					actionColIdx = node->mt_action_col_idxes[node->mt_whichplan];
+
+					/* It is planned as not split update mode */
+					if (actionColIdx <= 0)
+					{
+						slot = ExecUpdate(tupleid, slot, planSlot,
+										  &node->mt_epqstate, estate);
+						break;
+					}
+
+					action = DatumGetUInt32(slot_getattr(planSlot, actionColIdx, &isnull));
+					Assert(!isnull);
+
+					if (DML_INSERT == action)
+					{
+						if (estate->es_result_partitions)
+							checkPartitionUpdate(estate, slot, estate->es_result_relation_info);
+
+						slot = ExecInsert(slot, planSlot, estate,
+										  PLANGEN_PLANNER, true /* isUpdate */);
+					}
+					else /* DML_DELETE */
+						slot = ExecDelete(tupleid, planSlot,
+										  &node->mt_epqstate, estate,
+										  PLANGEN_PLANNER, true /* isUpdate */);
+				}
 				break;
 			case CMD_DELETE:
 				slot = ExecDelete(tupleid, planSlot,
@@ -1456,6 +1485,23 @@ ExecInitModifyTable(ModifyTable *node, EState *estate, int eflags)
 	mtstate->operation = operation;
 	/* set up epqstate with dummy subplan pointer for the moment */
 	EvalPlanQualInit(&mtstate->mt_epqstate, estate, NULL, node->epqParam);
+
+	if (CMD_UPDATE == operation)
+	{
+		Assert(list_length(node->action_col_idxes) == list_length(node->ctid_col_idxes));
+		Assert(list_length(node->action_col_idxes) == nplans);
+
+		mtstate->mt_action_col_idxes = (AttrNumber *) palloc0 (sizeof(AttrNumber) * list_length(node->action_col_idxes));
+		mtstate->mt_ctid_col_idxes = (AttrNumber *) palloc0 (sizeof(AttrNumber) * list_length(node->ctid_col_idxes));
+
+		i = 0;
+		foreach(l, node->action_col_idxes)
+			mtstate->mt_action_col_idxes[i++] = lfirst_int(l);
+
+		i = 0;
+		foreach(l, node->ctid_col_idxes)
+			mtstate->mt_ctid_col_idxes[i++] = lfirst_int(l);
+	}
 
 	/* GPDB: Don't fire statement-triggers in QE reader processes */
 	if (Gp_role != GP_ROLE_EXECUTE || Gp_is_writer)

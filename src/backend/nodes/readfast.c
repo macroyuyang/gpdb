@@ -2839,6 +2839,8 @@ _readModifyTable(void)
 	READ_NODE_FIELD(returningLists);
 	READ_NODE_FIELD(rowMarks);
 	READ_INT_FIELD(epqParam);
+	READ_NODE_FIELD(action_col_idxes);
+	READ_NODE_FIELD(ctid_col_idxes);
 
 	READ_DONE();
 }

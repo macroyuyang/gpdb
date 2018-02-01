@@ -5597,6 +5597,8 @@ make_modifytable(PlannerInfo *root, CmdType operation, List *resultRelations,
 	node->returningLists = returningLists;
 	node->rowMarks = rowMarks;
 	node->epqParam = epqParam;
+	node->action_col_idxes = NIL;
+	node->action_col_idxes = NIL;
 
 	adjust_modifytable_flow(root, node);
 
@@ -5705,9 +5707,23 @@ adjust_modifytable_flow(PlannerInfo *root, ModifyTable *node)
 											targetPolicy->nattrs,
 											targetPolicy->attrs))
 				{
-					ereport(ERROR, (errcode(ERRCODE_GP_FEATURE_NOT_YET),
-									errmsg("Cannot parallelize an UPDATE statement that updates the distribution columns")));
+					List	   *hashExpr;
+					Plan	*new_subplan;
+
+					new_subplan = (Plan *) make_splitupdate(root, (Plan *) node, subplan, rte, rti);
+					hashExpr = getExprListFromTargetList(new_subplan->targetlist,
+														 targetPolicy->nattrs,
+														 targetPolicy->attrs,
+														 false);
+					if (!repartitionPlan(new_subplan, false, false, hashExpr))
+						ereport(ERROR, (errcode(ERRCODE_GP_FEATURE_NOT_YET),
+										errmsg("Cannot parallelize that UPDATE yet")));
+
+					lcp->data.ptr_value = new_subplan;
+					continue;
 				}
+				node->action_col_idxes = lappend_int(node->action_col_idxes, -1);
+				node->ctid_col_idxes = lappend_int(node->ctid_col_idxes, -1);
 				request_explicit_motion(subplan, rti, root->glob->finalrtable);
 			}
 			else if (targetPolicyType == POLICYTYPE_ENTRY)
@@ -5743,6 +5759,8 @@ adjust_modifytable_flow(PlannerInfo *root, ModifyTable *node)
 					 */
 					subplan->flow->req_move = MOVEMENT_NONE;
 				}
+				node->action_col_idxes = lappend_int(node->action_col_idxes, -1);
+				node->ctid_col_idxes = lappend_int(node->ctid_col_idxes, -1);
 			}
 			else
 				elog(ERROR, "unrecognized policy type %u", targetPolicyType);
