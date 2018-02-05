@@ -196,7 +196,11 @@ ExecInsert(TupleTableSlot *slot,
 	{
 		resultRelInfo = slot_get_partition(slot, estate);
 
-		/* Check whether the user provided the correct leaf part only if required */
+		/*
+		 * Check whether the user provided the correct leaf part only if required.
+		 * For isUpdate, the check for resultRelInfo equals to target partitioned relation id
+		 * has been done by checkPartitionUpdate before. So we don't need to check again here.
+		 */
 		if (!dml_ignore_target_partition_check && !isUpdate)
 		{
 			Assert(NULL != estate->es_result_partitions->part &&
@@ -570,7 +574,8 @@ ExecDelete(ItemPointer tupleid,
 	{
 		/* BEFORE ROW DELETE Triggers */
 		if (resultRelInfo->ri_TrigDesc &&
-			resultRelInfo->ri_TrigDesc->n_before_row[TRIGGER_EVENT_DELETE] > 0)
+			resultRelInfo->ri_TrigDesc->n_before_row[TRIGGER_EVENT_DELETE] > 0 &&
+			!isUpdate)
 		{
 			bool		dodelete;
 
@@ -745,7 +750,7 @@ ldelete:;
 	 * anyway, since the tuple is still visible to other transactions.
 	 */
 
-	if (!(isAORowsTable || isAOColsTable) && planGen == PLANGEN_PLANNER)
+	if (!(isAORowsTable || isAOColsTable) && planGen == PLANGEN_PLANNER && !isUpdate)
 	{
 		/* AFTER ROW DELETE Triggers */
 		ExecARDeleteTriggers(estate, resultRelInfo, tupleid);

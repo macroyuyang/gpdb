@@ -37,11 +37,13 @@
 
 #include "commands/tablecmds.h"
 #include "commands/tablespace.h"
+#include "commands/trigger.h"
 #include "catalog/catalog.h"
 #include "catalog/gp_policy.h"
 #include "catalog/pg_type.h"
 
 #include "catalog/pg_proc.h"
+#include "catalog/pg_trigger.h"
 
 #include "cdb/cdbdisp_query.h"
 #include "cdb/cdbhash.h"		/* isGreenplumDbHashable() */
@@ -1241,6 +1243,37 @@ append_absent_targetlist(struct PlannerInfo *root, Plan *plan,
 	return append_absent_targetlist_mutator(plan, &context);
 }
 
+static void
+failIfUpdateTriggers(Relation relation)
+{
+	bool	found = false;
+
+	if (relation->rd_rel->relhastriggers && NULL == relation->trigdesc)
+		RelationBuildTriggers(relation);
+
+	if (!relation->trigdesc)
+		return;
+
+	if (relation->rd_rel->relhastriggers)
+	{
+		for (int i = 0; i < relation->trigdesc->numtriggers && !found; i++)
+		{
+			Trigger trigger = relation->trigdesc->triggers[i];
+			found = trigger_enabled(trigger.tgoid) &&
+					(get_trigger_type(trigger.tgoid) & TRIGGER_TYPE_UPDATE) == TRIGGER_TYPE_UPDATE;
+			if (found)
+				break;
+		}
+	}
+
+	if (found || child_triggers(relation->rd_id, TRIGGER_TYPE_UPDATE))
+	{
+		ereport(ERROR, (errcode(ERRCODE_GP_FEATURE_NOT_YET),
+						errmsg("Cannot parallelize an UPDATE statement that updates the distribution columns")));
+		relation_close(relation, NoLock);
+	}
+}
+
 /*
  * In legacy planner, we add a SplitUpdate node at top so that updating on distribution
  * columns could be handled. The SplitUpdate will split each update into delete + insert.
@@ -1262,15 +1295,24 @@ make_splitupdate(PlannerInfo *root, Plan *mt, Plan *subplan, RangeTblEntry *rte,
 	TargetEntry		*newTargetEntry;
 	SplitUpdate		*splitupdate;
 	DMLActionExpr	*actionExpr;
+	Relation		resultRelation;
+	TupleDesc		resultDesc;
 
 	Assert(IsA(mt, ModifyTable));
-	Assert(list_length(rte->eref->colnames) <= list_length(subplan->targetlist));
 
-	for (attrIdx = 1; attrIdx <= list_length(rte->eref->colnames); ++attrIdx)
+	/* Suppose we already hold locks before caller */
+	resultRelation = relation_open(rte->relid, NoLock);
+
+	failIfUpdateTriggers(resultRelation);
+
+	resultDesc = RelationGetDescr(resultRelation);
+
+	for (attrIdx = 1; attrIdx <= resultDesc->natts; ++attrIdx)
 	{
-		TargetEntry	*tle;
-		Var			*splitVar;
-		TargetEntry	*splitTargetEntry;
+		TargetEntry			*tle;
+		Var					*splitVar;
+		TargetEntry			*splitTargetEntry;
+		Form_pg_attribute	attr;
 
 		insertColIdx = lappend_int(insertColIdx, attrIdx);
 		deleteColIdx = lappend_int(deleteColIdx, attrIdx);
@@ -1279,7 +1321,8 @@ make_splitupdate(PlannerInfo *root, Plan *mt, Plan *subplan, RangeTblEntry *rte,
 
 		Assert(tle);
 
-		if (get_rte_attribute_is_dropped(rte, attrIdx))
+		attr = resultDesc->attrs[attrIdx - 1];
+		if (attr->attisdropped)
 		{
 			Assert(IsA(tle->expr, Const) && ((Const *) tle->expr)->constisnull);
 
@@ -1304,6 +1347,7 @@ make_splitupdate(PlannerInfo *root, Plan *mt, Plan *subplan, RangeTblEntry *rte,
 							 makeVar(resultRelationsIdx, attrIdx, exprType((Node *) tle->expr),
 									 exprTypmod((Node *) tle->expr), 0 /* varlevelsup */));
 	}
+	relation_close(resultRelation, NoLock);
 
 	Assert(attrIdx <= list_length(subplan->targetlist));
 	Assert(IsA(((TargetEntry *) list_nth(subplan->targetlist, attrIdx - 1))->expr, Var));
