@@ -1425,11 +1425,11 @@ create_external_scan_uri_list(ExtTableEntry *ext, bool *ismasteronly)
 				CdbComponentDatabaseInfo *p = &db_info->segment_db_info[i];
 				int segind = p->segindex;
 
-				/* 
+				/*
 				 * Assign mapping of external file to this segdb only if:
 				 * 1) This segdb is a valid primary.
-				 * 2) An external file wasn't already assigned to it. 
-				 * 3) If 'file' protocol, host of segdb and file must be 
+				 * 2) An external file wasn't already assigned to it.
+				 * 3) If 'file' protocol, host of segdb and file must be
 				 *    the same.
 				 *
 				 * This logic also guarantees that file that appears first in
@@ -2463,7 +2463,7 @@ create_tidscan_plan(PlannerInfo *root, TidPath *best_path,
 	 * Remove any clauses that are TID quals.  This is a bit tricky since the
 	 * tidquals list has implicit OR semantics.
 	 *
-	 * In the case of CURRENT OF, however, we do want the CurrentOfExpr to 
+	 * In the case of CURRENT OF, however, we do want the CurrentOfExpr to
 	 * reside in both the tidlist and the qual, as CurrentOfExpr is effectively
 	 * a ctid, gp_segment_id, and tableoid qual. Constant folding will
 	 * finish up this qual rewriting to ensure what we dispatch is a sane interpretation
@@ -3995,7 +3995,7 @@ make_subqueryscan(PlannerInfo *root,
 	plan->allParam = bms_copy(subplan->allParam);
 
 	/*
-	 * Note that, in most scan nodes, scanrelid refers to an entry in the rtable of the 
+	 * Note that, in most scan nodes, scanrelid refers to an entry in the rtable of the
 	 * containing plan; in a subqueryscan node, the containing plan is the higher
 	 * level plan!
 	 */
@@ -4381,8 +4381,8 @@ make_sort(PlannerInfo *root, Plan *lefttree, int numCols,
  * add_sort_cost --- basic routine to accumulate Sort cost into a
  * plan node representing the input cost.
  *
- * Unused arguments (e.g., sortColIdx and sortOperators arrays) are 
- * included to allow for future improvements to sort costing.  Note 
+ * Unused arguments (e.g., sortColIdx and sortOperators arrays) are
+ * included to allow for future improvements to sort costing.  Note
  * that root may be NULL (e.g. when called outside make_sort).
  */
 Plan *
@@ -5593,7 +5593,8 @@ make_modifytable(PlannerInfo *root, CmdType operation, List *resultRelations,
 	node->rowMarks = rowMarks;
 	node->epqParam = epqParam;
 	node->action_col_idxes = NIL;
-	node->action_col_idxes = NIL;
+	node->ctid_col_idxes = NIL;
+	node->oid_col_idxes = NIL;
 
 	adjust_modifytable_flow(root, node);
 
@@ -5719,6 +5720,7 @@ adjust_modifytable_flow(PlannerInfo *root, ModifyTable *node)
 				}
 				node->action_col_idxes = lappend_int(node->action_col_idxes, -1);
 				node->ctid_col_idxes = lappend_int(node->ctid_col_idxes, -1);
+				node->oid_col_idxes = lappend_int(node->oid_col_idxes, 0);
 				request_explicit_motion(subplan, rti, root->glob->finalrtable);
 			}
 			else if (targetPolicyType == POLICYTYPE_ENTRY)
@@ -5756,6 +5758,7 @@ adjust_modifytable_flow(PlannerInfo *root, ModifyTable *node)
 				}
 				node->action_col_idxes = lappend_int(node->action_col_idxes, -1);
 				node->ctid_col_idxes = lappend_int(node->ctid_col_idxes, -1);
+				node->oid_col_idxes = lappend_int(node->oid_col_idxes, 0);
 			}
 			else
 				elog(ERROR, "unrecognized policy type %u", targetPolicyType);

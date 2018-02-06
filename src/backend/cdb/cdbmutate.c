@@ -1288,6 +1288,7 @@ make_splitupdate(PlannerInfo *root, Plan *mt, Plan *subplan, RangeTblEntry *rte,
 	List			*insertColIdx = NIL;
 	List			*varsAbsent = NIL;
 	int				actionColIdx;
+	int				oidColIdx = 0;
 	int				attrIdx;
 	int				appendStart;
 	List			*splitUpdateTargetList = NIL;
@@ -1297,6 +1298,7 @@ make_splitupdate(PlannerInfo *root, Plan *mt, Plan *subplan, RangeTblEntry *rte,
 	DMLActionExpr	*actionExpr;
 	Relation		resultRelation;
 	TupleDesc		resultDesc;
+	bool			hasOids = false;
 
 	Assert(IsA(mt, ModifyTable));
 
@@ -1347,6 +1349,11 @@ make_splitupdate(PlannerInfo *root, Plan *mt, Plan *subplan, RangeTblEntry *rte,
 							 makeVar(resultRelationsIdx, attrIdx, exprType((Node *) tle->expr),
 									 exprTypmod((Node *) tle->expr), 0 /* varlevelsup */));
 	}
+
+	if (resultRelation->rd_rel->relhasoids)
+		hasOids = true;
+
+
 	relation_close(resultRelation, NoLock);
 
 	Assert(attrIdx <= list_length(subplan->targetlist));
@@ -1402,6 +1409,40 @@ make_splitupdate(PlannerInfo *root, Plan *mt, Plan *subplan, RangeTblEntry *rte,
 		list_nth_cell(deleteColIdx, attrIdx - 1)->data.int_value = appendTarget->resno;
 	}
 
+	if (hasOids)
+	{
+		Var			*appendVar;
+		Var			*splitVar;
+		TargetEntry	*splitTargetEntry;
+		int			oidIdx = 0;
+
+		appendVar = makeVar(resultRelationsIdx, ObjectIdAttributeNumber, OIDOID,
+							-1 /* type mod */, 0 /* varlevelsup */);
+
+		append_absent_targetlist(root, subplan, list_make1(appendVar), resultRelationsIdx);
+
+		foreach(lct, subplan->targetlist)
+		{
+			TargetEntry	*tle = (TargetEntry *) lfirst(lct);
+			if (IsA(tle->expr, Var) &&
+				((Var *) (tle->expr))->varno == resultRelationsIdx &&
+				((Var *) (tle->expr))->varattno == ObjectIdAttributeNumber)
+			{
+				break;
+			}
+			++oidIdx;
+		}
+
+		Assert(oidIdx < list_length(subplan->targetlist));
+
+		oidColIdx = list_length(splitUpdateTargetList) + 1;
+		splitVar = makeVar(OUTER, oidIdx + 1, OIDOID, -1 /* type mod */, 0 /* varlevelsup */);
+		splitVar->varnoold = resultRelationsIdx;
+		splitVar->varoattno = ObjectIdAttributeNumber;
+		splitTargetEntry = makeTargetEntry((Expr *) splitVar, oidColIdx, "oid", true);
+		splitUpdateTargetList = lappend(splitUpdateTargetList, splitTargetEntry);
+	}
+
 	actionExpr = makeNode(DMLActionExpr);
 	actionColIdx = list_length(splitUpdateTargetList) + 1;
 	newTargetEntry = makeTargetEntry((Expr *) actionExpr, actionColIdx, "ColRef", true);
@@ -1413,7 +1454,7 @@ make_splitupdate(PlannerInfo *root, Plan *mt, Plan *subplan, RangeTblEntry *rte,
 	Assert(ctidColIdx > 0);
 
 	splitupdate->ctidColIdx = ctidColIdx;
-	splitupdate->tupleoidColIdx = -1;
+	splitupdate->tupleoidColIdx = oidColIdx;
 	splitupdate->insertColIdx = insertColIdx;
 	splitupdate->deleteColIdx = deleteColIdx;
 	splitupdate->plan.targetlist = splitUpdateTargetList;
@@ -1430,6 +1471,8 @@ make_splitupdate(PlannerInfo *root, Plan *mt, Plan *subplan, RangeTblEntry *rte,
 		((ModifyTable *)mt)->action_col_idxes, actionColIdx);
 	((ModifyTable *)mt)->ctid_col_idxes = lappend_int(
 		((ModifyTable *)mt)->ctid_col_idxes, ctidColIdx);
+	((ModifyTable *)mt)->oid_col_idxes = lappend_int(
+		((ModifyTable *)mt)->oid_col_idxes, oidColIdx);
 
 	return splitupdate;
 }

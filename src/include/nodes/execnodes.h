@@ -1503,6 +1503,7 @@ typedef struct ModifyTableState
 	bool			fireBSTriggers;	/* do we need to fire stmt triggers? */
 	AttrNumber		*mt_action_col_idxes;
 	AttrNumber		*mt_ctid_col_idxes;
+	AttrNumber		*mt_oid_col_idxes;
 } ModifyTableState;
 
 /* ----------------

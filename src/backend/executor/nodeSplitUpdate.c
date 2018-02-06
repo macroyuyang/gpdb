@@ -182,7 +182,7 @@ ExecInitSplitUpdate(SplitUpdate *node, EState *estate, int eflags)
 		has_oids = true;
 	}
 	else
-		ExecContextForcesOids(splitupdatestate, &has_oids);
+		ExecContextForcesOids(&(splitupdatestate->ps), &has_oids);
 
 	TupleDesc tupDesc = ExecTypeFromTL(node->plan.targetlist, has_oids);
 	ExecSetSlotDescriptor(splitupdatestate->insertTuple, tupDesc);

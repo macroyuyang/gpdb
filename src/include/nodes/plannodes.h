@@ -352,6 +352,7 @@ typedef struct ModifyTable
 	int			epqParam;			/* ID of Param for EvalPlanQual re-eval */
 	List	   *action_col_idxes;
 	List	   *ctid_col_idxes;
+	List	   *oid_col_idxes;
 } ModifyTable;
 
 /* ----------------

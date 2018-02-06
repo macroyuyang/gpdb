@@ -454,6 +454,7 @@ _outModifyTable(StringInfo str, ModifyTable *node)
 	WRITE_INT_FIELD(epqParam);
 	WRITE_NODE_FIELD(action_col_idxes);
 	WRITE_NODE_FIELD(ctid_col_idxes);
+	WRITE_NODE_FIELD(oid_col_idxes);
 }
 
 static void
