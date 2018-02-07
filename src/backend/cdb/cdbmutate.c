@@ -1154,14 +1154,23 @@ append_absent_targetlist_mutator(Plan *plan,
 		foreach(lcv, pcontext->absent_vars)
 		{
 			TargetEntry	*newTle;
-			TargetEntry	*tle;
+			ListCell	*lct;
 
 			Assert(IsA(lfirst(lcv), Var));
 
-			tle = get_tle_by_resno(plan->targetlist, ((Var *) lfirst(lcv))->varattno);
+			foreach(lct, plan->targetlist)
+			{
+				TargetEntry	*tle;
 
-			if (!tle || !IsA((TargetEntry *) tle->expr, Var) ||
-				((Var *) ((TargetEntry *) tle->expr))->varattno != ((Var *) lfirst(lcv))->varattno)
+				Assert(IsA(lfirst(lct), TargetEntry));
+
+				tle = (TargetEntry *) lfirst(lct);
+				if (IsA(tle->expr, Var) &&
+					(((Var *) (tle->expr))->varattno == ((Var *) lfirst(lcv))->varattno))
+					break;
+			}
+
+			if (!lct)
 			{
 				newTle = makeTargetEntry((Expr *) lfirst(lcv), targetResno,
 										 "" /* resname */, false /* resjunk */);
@@ -1211,7 +1220,7 @@ append_absent_targetlist_mutator(Plan *plan,
 				if (!lct)
 				{
 
-					tle = makeTargetEntry(lfirst(lcv), targetResno, "" /* resname */, false /* junk */);
+					tle = makeTargetEntry(lfirst(lcv), targetResno++, "" /* resname */, false /* junk */);
 					plan->targetlist = lappend(plan->targetlist, tle);
 				}
 			}
