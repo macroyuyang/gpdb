@@ -105,6 +105,7 @@
 #include "cdb/cdbllize.h"
 #include "cdb/memquota.h"
 #include "cdb/cdbtargeteddispatch.h"
+#include "cdb/cdbfifo.h"
 
 extern bool cdbpathlocus_querysegmentcatalogs;
 
@@ -579,6 +580,32 @@ standard_ExecutorStart(QueryDesc *queryDesc, int eflags)
 
 		Assert(queryDesc->planstate);
 
+		/*
+		 * Get executor identity (who does the executor serve). we can assume
+		 * Forward scan direction for now just for retrieving the identity.
+		 */
+		if (!(eflags & EXEC_FLAG_EXPLAIN_ONLY))
+			exec_identity = getGpExecIdentity(queryDesc, ForwardScanDirection, estate);
+		else
+			exec_identity = GP_IGNORE;
+
+		if (Gp_role == GP_ROLE_DISPATCH &&
+			gp_multi_process_fetch &&
+			queryDesc->operation == CMD_SELECT &&
+			!(eflags & EXEC_FLAG_EXPLAIN_ONLY))
+		{
+			// FIXME: Generate unique token here.
+			int32		token = 12345;
+
+			elog(WARNING, "Retrive token #%d", token);
+
+			SetGpToken(token);
+
+			if (exec_identity == GP_ROOT_SLICE &&
+				LocallyExecutingSliceIndex(estate) == 0)
+				SetEndPointRole(EPR_SENDER);
+		}
+
 		if (Gp_role == GP_ROLE_DISPATCH &&
 			(queryDesc->plannedstmt->planTree->dispatch == DISPATCH_PARALLEL ||
 			 queryDesc->plannedstmt->nMotionNodes > 0))
@@ -731,15 +758,6 @@ standard_ExecutorStart(QueryDesc *queryDesc, int eflags)
 				CdbDispatchPlan(queryDesc, needDtxTwoPhase, true);
 		}
 
-		/*
-		 * Get executor identity (who does the executor serve). we can assume
-		 * Forward scan direction for now just for retrieving the identity.
-		 */
-		if (!(eflags & EXEC_FLAG_EXPLAIN_ONLY))
-			exec_identity = getGpExecIdentity(queryDesc, ForwardScanDirection, estate);
-		else
-			exec_identity = GP_IGNORE;
-
 		/* non-root on QE */
 		if (exec_identity == GP_NON_ROOT_ON_QE)
 		{
@@ -864,6 +882,7 @@ standard_ExecutorRun(QueryDesc *queryDesc,
 	DestReceiver *dest;
 	bool		sendTuples;
 	MemoryContext oldcontext;
+	DestReceiver *fifoDest = NULL;
 	/*
 	 * NOTE: Any local vars that are set in the PG_TRY block and examined in the
 	 * PG_CATCH block should be declared 'volatile'. (setjmp shenanigans)
@@ -923,6 +942,32 @@ standard_ExecutorRun(QueryDesc *queryDesc,
 		(*dest->rStartup) (dest, operation, queryDesc->tupDesc);
 
 	/*
+	 * Run the plan locally.  There are three ways;
+	 *
+	 * 1. Do nothing
+	 * 2. Run a root slice
+	 * 3. Run a non-root slice on a QE.
+	 *
+	 * Here we decide what is our identity -- root slice, non-root
+	 * on QE or other (in which case we do nothing), and then run
+	 * the plan if required. For more information see
+	 * getGpExecIdentity() in execUtils.
+	 */
+	exec_identity = getGpExecIdentity(queryDesc, direction, estate);
+
+	/*
+	 * When run a root slice, and gp_multi_process_fetch is enabled, it means
+	 * QD become the end point for connection. It is true, for
+	 * instance, SELECT * FROM foo LIMIT 10, and the result should
+	 * go out from QD.
+	 */
+	if (EndPointRole() == EPR_SENDER)
+	{
+		fifoDest = CreateDestReceiver(DestFifo);
+		(*fifoDest->rStartup) (dest, operation, queryDesc->tupDesc);
+	}
+
+	/*
 	 * Need a try/catch block here so that if an ereport is called from
 	 * within ExecutePlan, we can clean up by calling CdbCheckDispatchResult.
 	 * This cleans up the asynchronous commands running through the threads launched from
@@ -930,20 +975,6 @@ standard_ExecutorRun(QueryDesc *queryDesc,
 	 */
 	PG_TRY();
 	{
-		/*
-		 * Run the plan locally.  There are three ways;
-		 *
-		 * 1. Do nothing
-		 * 2. Run a root slice
-		 * 3. Run a non-root slice on a QE.
-		 *
-		 * Here we decide what is our identity -- root slice, non-root
-		 * on QE or other (in which case we do nothing), and then run
-		 * the plan if required. For more information see
-		 * getGpExecIdentity() in execUtils.
-		 */
-		exec_identity = getGpExecIdentity(queryDesc, direction, estate);
-
 		if (exec_identity == GP_IGNORE)
 		{
 			/* do nothing */
@@ -992,7 +1023,7 @@ standard_ExecutorRun(QueryDesc *queryDesc,
 						sendTuples,
 						count,
 						direction,
-						dest);
+						(EndPointRole () == EPR_SENDER ? fifoDest : dest));
 		}
 		else
 		{
@@ -1057,6 +1088,13 @@ standard_ExecutorRun(QueryDesc *queryDesc,
 	/*
 	 * shutdown tuple receiver, if we started it
 	 */
+	if (EndPointRole() == EPR_SENDER)
+	{
+		(*fifoDest->rShutdown) (fifoDest);
+		(*fifoDest->rDestroy) (fifoDest);
+	}
+
+
 	if (sendTuples)
 		(*dest->rShutdown) (dest);
 
@@ -1247,6 +1285,8 @@ standard_ExecutorEnd(QueryDesc *queryDesc)
      */
 	ExecEndPlan(queryDesc->planstate, estate);
 
+	ClearEndPointRole();
+
 	WorkfileQueryspace_ReleaseEntry();
 
 	/*
@@ -1299,6 +1339,7 @@ standard_ExecutorEnd(QueryDesc *queryDesc)
 	queryDesc->estate = NULL;
 	queryDesc->planstate = NULL;
 	queryDesc->totaltime = NULL;
+	ClearGpToken();
 
 	if (DEBUG1 >= log_min_messages)
 	{
@@ -4517,7 +4558,7 @@ FillSliceTable(EState *estate, PlannedStmt *stmt)
 	cxt.estate = estate;
 	cxt.currentSliceId = 0;
 
-	if (stmt->intoClause != NULL)
+	if (stmt->intoClause != NULL || gp_multi_process_fetch)
 	{
 		Slice	   *currentSlice = (Slice *) linitial(sliceTable->slices);
 

@@ -45,6 +45,7 @@ pg_time_t	MyStartTime;
 struct Port *MyProcPort;
 long		MyCancelKey;
 int			MyPMChildSlot;
+bool		gp_multi_process_fetch = false;
 
 /*
  * DataDir is the absolute path to the top level of the PGDATA directory tree.

@@ -24,17 +24,22 @@
 #include "postgres.h"
 
 #include <limits.h>
+#include <poll.h>
+#include <unistd.h>
 
 #include "access/xact.h"
 #include "commands/portalcmds.h"
 #include "executor/executor.h"
 #include "executor/tstoreReceiver.h"
+#include "lib/stringinfo.h"
 #include "tcop/pquery.h"
 #include "utils/memutils.h"
 #include "utils/snapmgr.h"
 
 #include "cdb/cdbgang.h"
 #include "cdb/cdbvars.h"
+#include "cdb/tupser.h"
+#include "cdb/cdbfifo.h"
 #include "postmaster/backoff.h"
 #include "utils/resscheduler.h"
 
@@ -553,4 +558,26 @@ PersistHoldablePortal(Portal portal)
 	 * PortalContext.
 	 */
 	MemoryContextDeleteChildren(PortalGetHeapMemory(portal));
+}
+
+void
+RetrieveResults(RetrieveStmt *stmt, DestReceiver *dest)
+{
+	TupleTableSlot	*result;
+
+	InitConn();
+
+	while (true)
+	{
+		result = RecvTupleSlot();
+		if (!result)
+			break;
+		(*dest->receiveSlot) (result, dest);
+	}
+
+	FinishConn();
+	CloseConn();
+	DetachEndPoint();
+	ClearEndPointRole();
+	ClearGpToken();
 }

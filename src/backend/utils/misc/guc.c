@@ -7265,6 +7265,20 @@ GetPGVariableResultDesc(const char *name)
 	return tupdesc;
 }
 
+TupleDesc
+GetRetrieveResultDesc(const char *name)
+{
+	Relation	relation;
+	TupleDesc	tupledesc;
+
+	relation = relation_open(16385, AccessShareLock);
+	relation_close(relation, AccessShareLock);
+
+	tupledesc = CreateTupleDescCopy(relation->rd_att);
+
+	return tupledesc;
+}
+
 
 /*
  * SHOW command

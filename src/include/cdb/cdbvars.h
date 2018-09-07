@@ -115,6 +115,7 @@ typedef enum
 	GP_ROLE_UTILITY = 0,		/* Operating as a simple database engine */
 	GP_ROLE_DISPATCH,			/* Operating as the parallel query dispatcher */
 	GP_ROLE_EXECUTE,			/* Operating as a parallel query executor */
+	GP_ROLE_RETRIEVE,
 	GP_ROLE_UNDEFINED			/* Should never see this role in use */
 } GpRoleValue;
 

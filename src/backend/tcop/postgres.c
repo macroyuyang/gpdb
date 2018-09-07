@@ -41,6 +41,7 @@
 #endif
 
 #include <pthread.h>
+#include <string.h>
 
 #include "access/distributedlog.h"
 #include "access/printtup.h"
@@ -91,6 +92,7 @@
 #include "cdb/cdbdtxcontextinfo.h"
 #include "cdb/cdbdisp_query.h"
 #include "cdb/cdbdispatchresult.h"
+#include "cdb/cdbfifo.h"
 #include "cdb/cdbgang.h"
 #include "cdb/ml_ipc.h"
 #include "utils/guc.h"
@@ -1336,6 +1338,9 @@ exec_mpp_query(const char *query_string,
 						  commandTag,
 						  list_make1(plan ? (Node*)plan : (Node*)utilityStmt),
 						  NULL);
+
+		if (commandType == CMD_SELECT && localSlice == 0)
+			SetEndPointRole(EPR_SENDER);
 
 		/*
 		 * Start the portal.
@@ -5213,6 +5218,7 @@ PostgresMain(int argc, char *argv[],
 					 * Since PortalDefineQuery() does not take NULL query string,
 					 * we initialize it with a constant empty string.
 					 */
+
 					const char *query_string = pstrdup("");
 
 					const char *serializedDtxContextInfo = NULL;
@@ -5229,6 +5235,7 @@ PostgresMain(int argc, char *argv[],
 					int serializedParamslen = 0;
 					int serializedQueryDispatchDesclen = 0;
 					int resgroupInfoLen = 0;
+					int	multi_process_fetch_token = 0;
 
 					int localSlice = -1, i;
 					int rootIdx;
@@ -5316,6 +5323,10 @@ PostgresMain(int argc, char *argv[],
 					resgroupInfoLen = pq_getmsgint(&input_message, 4);
 					if (resgroupInfoLen > 0)
 						resgroupInfoBuf = pq_getmsgbytes(&input_message, resgroupInfoLen);
+
+					multi_process_fetch_token = pq_getmsgint(&input_message, sizeof(int32));
+
+					SetGpToken(multi_process_fetch_token);
 
 					pq_getmsgend(&input_message);
 

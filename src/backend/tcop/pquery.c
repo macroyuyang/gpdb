@@ -29,6 +29,7 @@
 #include "utils/snapmgr.h"
 
 #include "cdb/ml_ipc.h"
+#include "cdb/cdbfifo.h"
 #include "commands/createas.h"
 #include "commands/queue.h"
 #include "commands/createas.h"
@@ -424,6 +425,8 @@ ChoosePortalStrategy(List *stmts)
 				{
 					if (pstmt->hasModifyingCTE)
 						return PORTAL_ONE_MOD_WITH;
+					else if (gp_multi_process_fetch)
+						return PORTAL_MULTI_QUERY;
 					else
 						return PORTAL_ONE_SELECT;
 				}

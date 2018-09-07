@@ -52,6 +52,7 @@
 
 #include <ctype.h>
 #include <limits.h>
+#include <stdlib.h>
 
 #include "catalog/index.h"
 #include "catalog/namespace.h"
@@ -237,6 +238,7 @@ static Node *makeIsNotDistinctFromNode(Node *expr, int position);
 		DeallocateStmt PrepareStmt ExecuteStmt
 		DropOwnedStmt ReassignOwnedStmt
 		AlterTSConfigurationStmt AlterTSDictionaryStmt
+		RetrieveStmt
 
 /* GPDB-specific commands */
 %type <node>	AlterTypeStmt AlterQueueStmt AlterResourceGroupStmt
@@ -641,7 +643,7 @@ static Node *makeIsNotDistinctFromNode(Node *expr, int position);
 
 	RANGE READ REAL REASSIGN RECHECK RECURSIVE REF REFERENCES REINDEX
 	RELATIVE_P RELEASE RENAME REPEATABLE REPLACE REPLICA
-	RESET RESTART RESTRICT RETURNING RETURNS REVOKE RIGHT ROLE ROLLBACK
+	RESET RESTART RESTRICT RETRIEVE RETURNING RETURNS REVOKE RIGHT ROLE ROLLBACK
 	ROW ROWS RULE
 
 	SAVEPOINT SCHEMA SCROLL SEARCH SECOND_P SECURITY SELECT SEQUENCE SEQUENCES
@@ -952,6 +954,7 @@ static Node *makeIsNotDistinctFromNode(Node *expr, int position);
 			%nonassoc RESOURCE
 			%nonassoc RESTART
 			%nonassoc RESTRICT
+			%nonassoc RETRIEVE
 			%nonassoc RETURNS
 			%nonassoc REVOKE
 			%nonassoc ROLE
@@ -1244,6 +1247,7 @@ stmt :
 			| VariableSetStmt
 			| VariableShowStmt
 			| ViewStmt
+			| RetrieveStmt
 			| /*EMPTY*/
 				{ $$ = NULL; }
 		;
@@ -11288,6 +11292,15 @@ SelectStmt: select_no_parens			%prec UMINUS
 			| select_with_parens		%prec UMINUS
 		;
 
+RetrieveStmt:
+			RETRIEVE name
+				{
+					RetrieveStmt *n = makeNode(RetrieveStmt);
+					n->token = atol($2);
+					$$ = (Node *)n;
+				}
+		;
+
 select_with_parens:
 			'(' select_no_parens ')'				{ $$ = $2; }
 			| '(' select_with_parens ')'			{ $$ = $2; }
@@ -15330,6 +15343,7 @@ unreserved_keyword:
 			| RESOURCE
 			| RESTART
 			| RESTRICT
+			| RETRIEVE
 			| RETURNS
 			| REVOKE
 			| ROLE

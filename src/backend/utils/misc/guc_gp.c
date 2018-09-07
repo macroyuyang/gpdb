@@ -91,6 +91,7 @@ static void assign_gp_default_storage_options(const char *newval, void *extra);
 static bool check_pljava_classpath_insecure(bool *newval, void **extra, GucSource source);
 static void assign_pljava_classpath_insecure(bool newval, void *extra);
 static bool check_gp_resource_group_bypass(bool *newval, void **extra, GucSource source);
+static bool check_gp_multi_process_fetch(bool *newval, void **extra, GucSource source);
 
 extern struct config_generic *find_option(const char *name, bool create_placeholders, int elevel);
 
@@ -3062,6 +3063,17 @@ struct config_bool ConfigureNamesBool_gp[] =
 		check_gp_resource_group_bypass, NULL, NULL
 	},
 
+	{
+		{"gp_multi_process_fetch", PGC_USERSET, DEVELOPER_OPTIONS,
+			gettext_noop("If the value is true, the select query result will be retrieved from end points."),
+			NULL,
+			GUC_GPDB_ADDOPT
+		},
+		&gp_multi_process_fetch,
+		false,
+		check_gp_multi_process_fetch, NULL, NULL
+	},
+
 	/* End-of-list marker */
 	{
 		{NULL, 0, 0, NULL, NULL}, NULL, false, NULL, NULL
@@ -5202,6 +5214,19 @@ check_gp_resource_group_bypass(bool *newval, void **extra, GucSource source)
 		return true;
 
 	GUC_check_errmsg("SET gp_resource_group_bypass cannot run inside a transaction block");
+	return false;
+}
+
+static bool
+check_gp_multi_process_fetch(bool *newval, void **extra, GucSource source)
+{
+	if (source != PGC_S_USER)
+		return true;
+
+	if (Gp_role != GP_ROLE_UTILITY && Gp_role != GP_ROLE_RETRIEVE)
+		return true;
+
+	GUC_check_errmsg("SET gp_multi_process_fetch cannot run in utility or retrieve mode");
 	return false;
 }
 

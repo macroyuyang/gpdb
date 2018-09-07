@@ -394,6 +394,10 @@ string_to_role(const char *string)
 	{
 		role = GP_ROLE_UTILITY;
 	}
+	else if (pg_strcasecmp(string, "retrieve") == 0)
+	{
+		role = GP_ROLE_RETRIEVE;
+	}
 
 	return role;
 }

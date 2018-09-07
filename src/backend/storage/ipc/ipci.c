@@ -59,6 +59,7 @@
 #include "executor/spi.h"
 #include "utils/workfile_mgr.h"
 #include "utils/session_state.h"
+#include "cdb/cdbfifo.h"
 
 shmem_startup_hook_type shmem_startup_hook = NULL;
 
@@ -190,6 +191,9 @@ CreateSharedMemoryAndSemaphores(bool makePrivate, int port)
 
 		/* size of Instrumentation slots */
 		size = add_size(size, InstrShmemSize());
+
+		/* size of greenplum to greemplum end point shared memory */
+		size = add_size(size, EndPoint_ShmemSize());
 
 		/*
 		 * Create the shmem segment
@@ -343,6 +347,8 @@ CreateSharedMemoryAndSemaphores(bool makePrivate, int port)
 
 	if (gp_enable_resqueue_priority)
 		BackoffStateInit();
+
+	EndPoint_ShmemInit();
 
 	/*
 	 * Now give loadable modules a chance to set up their shmem allocations

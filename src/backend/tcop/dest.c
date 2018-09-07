@@ -107,6 +107,9 @@ CreateDestReceiver(CommandDest dest)
 		case DestRemoteExecute:
 			return printtup_create_DR(dest);
 
+		case DestFifo:
+			return printtup_create_fifo_DR(DestFifo);
+
 		case DestNone:
 			return &donothingDR;
 
@@ -159,6 +162,7 @@ EndCommand(const char *commandTag, CommandDest dest)
 		case DestIntoRel:
 		case DestCopyOut:
 		case DestSQLFunction:
+		case DestFifo:
 			break;
 	}
 }
@@ -200,6 +204,7 @@ NullCommand(CommandDest dest)
 		case DestIntoRel:
 		case DestCopyOut:
 		case DestSQLFunction:
+		case DestFifo:
 			break;
 	}
 }
@@ -250,6 +255,7 @@ ReadyForQuery(CommandDest dest)
 		case DestIntoRel:
 		case DestCopyOut:
 		case DestSQLFunction:
+		case DestFifo:
 			break;
 	}
 }

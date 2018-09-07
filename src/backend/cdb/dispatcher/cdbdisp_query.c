@@ -46,6 +46,7 @@
 #include "cdb/cdbdisp_dtx.h"	/* for qdSerializeDtxContextInfo() */
 #include "cdb/cdbdispatchresult.h"
 #include "cdb/cdbcopy.h"
+#include "cdb/cdbfifo.h"
 
 extern bool Test_print_direct_dispatch_info;
 
@@ -934,7 +935,8 @@ buildGpQueryString(DispatchCommandQueryParms *pQueryParms,
 		sizeof(numSlices) +
 		sizeof(int) * numSlices +
 		sizeof(resgroupInfo.len) +
-		resgroupInfo.len;
+		resgroupInfo.len +
+		sizeof(int32);
 
 
 	shared_query = palloc0(total_query_len);
@@ -1065,6 +1067,10 @@ buildGpQueryString(DispatchCommandQueryParms *pQueryParms,
 		memcpy(pos, resgroupInfo.data, resgroupInfo.len);
 		pos += resgroupInfo.len;
 	}
+
+	n32 = htonl(GpToken());
+	memcpy(pos, &n32, sizeof(n32));
+	pos += sizeof(n32);
 
 	len = pos - shared_query - 1;
 

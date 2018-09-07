@@ -685,6 +685,7 @@ extern void SetPGVariable(const char *name, List *args, bool is_local);
 extern void SetPGVariableOptDispatch(const char *name, List *args, bool is_local, bool gp_dispatch);
 extern void GetPGVariable(const char *name, DestReceiver *dest);
 extern TupleDesc GetPGVariableResultDesc(const char *name);
+extern TupleDesc GetRetrieveResultDesc(const char *name);
 
 extern void ExecSetVariableStmt(VariableSetStmt *stmt);
 extern char *ExtractSetVariableArgs(VariableSetStmt *stmt);
